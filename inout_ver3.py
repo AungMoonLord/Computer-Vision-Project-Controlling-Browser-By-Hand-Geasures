@@ -12,7 +12,7 @@ mp_drawing = mp.solutions.drawing_utils
 prev_distance = None
 last_zoom_time = 0
 last_reset_time = 0
-zoom_cooldown = 0.5  # 0.5 วินาที cooldown สำหรับ zoom
+zoom_cooldown = 0.8  # 0.5 วินาที cooldown สำหรับ zoom
 reset_cooldown = 0   # 2 วินาที cooldown สำหรับ reset
 
 def calculate_distance(point1, point2):
@@ -55,10 +55,9 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
     
     # กำหนด threshold สำหรับ "ห่างกันมาก" / "ห่างกันน้อย"
     threshold = 0.15  # ค่า normalized (0-1) อาจต้องปรับตามกล้อง
-    
     if prev_distance is not None:
         # ถ้าระยะห่างมากกว่า threshold → Zoom In
-        if distance > threshold:
+        if distance > threshold and :
             pyautogui.hotkey('ctrl', '+')
             print("Zoom In")
             last_zoom_time = current_time
