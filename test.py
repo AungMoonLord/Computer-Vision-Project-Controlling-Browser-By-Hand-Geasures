@@ -28,36 +28,47 @@ def calculate_distance(point1, point2):
     """คำนวณระยะห่างระหว่าง 2 จุด"""
     return math.sqrt((point1.x - point2.x)**2 + (point1.y - point2.y)**2)
 
-def calculate_zoom_gesture(thumb_tip, index_tip):
-    """ควบคุม Zoom In/Out ด้วยการกาง/หุบนิ้วโป้งกับนิ้วชี้ (แบบ trackpad)"""
+def calculate_zoom_gesture(landmarks):
+    """ควบคุม Zoom In/Out ด้วยการกาง/หุบนิ้วโป้งกับนิ้วชี้เท่านั้น"""
     global prev_distance, last_zoom_time
     
-    current_time = time.time()
-    distance = calculate_distance(thumb_tip, index_tip)
+    # ตรวจสอบว่าชูนิ้วโป้งและนิ้วชี้เท่านั้น
+    fingers = get_finger_states(landmarks)
+    thumb_up = fingers[0]   # นิ้วโป้ง
+    index_up = fingers[1]   # นิ้วชี้
+    other_fingers_down = not any(fingers[2:])  # นิ้วอื่นๆ ต้องหุบ
     
-    # ตรวจสอบ cooldown สำหรับ zoom
-    if (current_time - last_zoom_time) < zoom_cooldown:
+    # ทำงานเฉพาะเมื่อชูนิ้วโป้งกับนิ้วชี้เท่านั้น
+    if thumb_up and index_up and other_fingers_down:
+        thumb_tip = landmarks[4]   # นิ้วโป้ง
+        index_tip = landmarks[8]   # นิ้วชี้
+        
+        current_time = time.time()
+        distance = calculate_distance(thumb_tip, index_tip)
+        
+        # ตรวจสอบ cooldown สำหรับ zoom
+        if (current_time - last_zoom_time) < zoom_cooldown:
+            return None
+        
+        if prev_distance is not None:
+            diff = distance - prev_distance
+            if diff > 0.03:  # กางออก
+                pyautogui.hotkey('ctrl', '+')
+                print("Zoom In")
+                last_zoom_time = current_time
+                return "Zoom In"
+            elif diff < -0.03:  # หุบเข้า
+                pyautogui.hotkey('ctrl', '-')
+                print("Zoom Out")
+                last_zoom_time = current_time
+                return "Zoom Out"
+        
+        prev_distance = distance
         return None
-    
-    if prev_distance is not None:
-        diff = distance - prev_distance
-        if diff > 0.03:  # กางออก - Zoom In แบบ trackpad
-            pyautogui.keyDown('ctrl')  # กด Ctrl ค้าง
-            pyautogui.scroll(1)        # เลื่อนขึ้น (ขยายออก)
-            pyautogui.keyUp('ctrl')    # ปล่อย Ctrl
-            print("Zoom In (Trackpad style)")
-            last_zoom_time = current_time
-            return "Zoom In"
-        elif diff < -0.03:  # หุบเข้า - Zoom Out แบบ trackpad
-            pyautogui.keyDown('ctrl')  # กด Ctrl ค้าง
-            pyautogui.scroll(-1)       # เลื่อนลง (ขยายเข้า)
-            pyautogui.keyUp('ctrl')    # ปล่อย Ctrl
-            print("Zoom Out (Trackpad style)")
-            last_zoom_time = current_time
-            return "Zoom Out"
-    
-    prev_distance = distance
-    return None
+    else:
+        # ถ้าไม่ใช่ท่าทางที่ต้องการ รีเซ็ต prev_distance
+        prev_distance = None
+        return None
 
 def is_all_fingers_up(landmarks):
     """ตรวจสอบว่าชูนิ้ว 5 นิ้วพร้อมกันหรือไม่"""
@@ -93,10 +104,8 @@ with mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7) a
                 # ดึงข้อมูล landmark
                 landmarks = hand_landmarks.landmark
                 
-                # ควบคุม Zoom ด้วยนิ้วโป้ง + นิ้วชี้
-                thumb_tip = landmarks[4]   # นิ้วโป้ง
-                index_tip = landmarks[8]   # นิ้วชี้
-                zoom_action = calculate_zoom_gesture(thumb_tip, index_tip)
+                # ควบคุม Zoom ด้วยนิ้วโป้ง + นิ้วชี้เท่านั้น
+                zoom_action = calculate_zoom_gesture(landmarks)
                 
                 # ตรวจสอบชูนิ้ว 5 นิ้ว (Reset Zoom) พร้อม cooldown
                 current_time = time.time()
@@ -107,10 +116,18 @@ with mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7) a
                     cv2.putText(image, "Reset Zoom", (50, 150),
                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 
-                # แสดงค่าระยะห่าง
-                distance = calculate_distance(thumb_tip, index_tip)
-                cv2.putText(image, f"Distance: {distance:.2f}", (50, 50),
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                # แสดงค่าระยะห่าง (เฉพาะเมื่อชูนิ้วโป้งกับนิ้วชี้)
+                fingers = get_finger_states(landmarks)
+                thumb_up = fingers[0]
+                index_up = fingers[1]
+                other_fingers_down = not any(fingers[2:])
+                
+                if thumb_up and index_up and other_fingers_down:
+                    thumb_tip = landmarks[4]
+                    index_tip = landmarks[8]
+                    distance = calculate_distance(thumb_tip, index_tip)
+                    cv2.putText(image, f"Distance: {distance:.2f}", (50, 50),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 
                 # แสดง action ที่ทำ
                 if zoom_action:
