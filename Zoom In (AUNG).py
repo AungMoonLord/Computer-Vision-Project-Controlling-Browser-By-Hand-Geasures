@@ -8,10 +8,12 @@ import time
 mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 
-# ตัวแปร global
+# ตัวแปร global สำหรับควบคุม timing
 prev_distance = None
+last_zoom_time = 0
 last_reset_time = 0
-reset_cooldown = 2.0  # 2 วินาที cooldown
+zoom_cooldown = 0.5  # 0.5 วินาที cooldown สำหรับ zoom
+reset_cooldown = 2.0  # 2 วินาที cooldown สำหรับ reset
 
 def get_finger_states(landmarks):
     """ตรวจสอบสถานะของนิ้วแต่ละนิ้ว (ชูหรือไม่ชู)"""
@@ -28,19 +30,26 @@ def calculate_distance(point1, point2):
 
 def calculate_zoom_gesture(thumb_tip, index_tip):
     """ควบคุม Zoom In/Out ด้วยการกาง/หุบนิ้วโป้งกับนิ้วชี้"""
-    global prev_distance
+    global prev_distance, last_zoom_time
     
+    current_time = time.time()
     distance = calculate_distance(thumb_tip, index_tip)
+    
+    # ตรวจสอบ cooldown สำหรับ zoom
+    if (current_time - last_zoom_time) < zoom_cooldown:
+        return None
     
     if prev_distance is not None:
         diff = distance - prev_distance
-        if diff > 0.02:  # กางออก
+        if diff > 0.03:  # กางออก (เพิ่ม threshold เป็น 0.03)
             pyautogui.hotkey('ctrl', '+')
             print("Zoom In")
+            last_zoom_time = current_time
             return "Zoom In"
-        elif diff < -0.02:  # หุบเข้า
+        elif diff < -0.03:  # หุบเข้า (เพิ่ม threshold เป็น 0.03)
             pyautogui.hotkey('ctrl', '-')
             print("Zoom Out")
+            last_zoom_time = current_time
             return "Zoom Out"
     
     prev_distance = distance
