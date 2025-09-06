@@ -12,8 +12,8 @@ mp_drawing = mp.solutions.drawing_utils
 prev_distance = None
 last_zoom_time = 0
 last_reset_time = 0
-zoom_cooldown = 0.5  # 0.5 วินาที cooldown สำหรับ zoom
-reset_cooldown = 2.0  # 2 วินาที cooldown สำหรับ reset
+zoom_cooldown = 1.2  # 0.5 วินาที cooldown สำหรับ zoom
+reset_cooldown = 0 # 2 วินาที cooldown สำหรับ reset
 
 def get_finger_states(landmarks):
     """ตรวจสอบสถานะของนิ้วแต่ละนิ้ว (ชูหรือไม่ชู)"""
