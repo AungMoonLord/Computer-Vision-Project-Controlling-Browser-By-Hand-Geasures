@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import pyautogui
 import math
+import time
 
 # ตั้งค่า MediaPipe
 mp_hands = mp.solutions.hands
@@ -9,6 +10,8 @@ mp_drawing = mp.solutions.drawing_utils
 
 # ตัวแปร global
 prev_distance = None
+last_reset_time = 0
+reset_cooldown = 2.0  # 2 วินาที cooldown
 
 def get_finger_states(landmarks):
     """ตรวจสอบสถานะของนิ้วแต่ละนิ้ว (ชูหรือไม่ชู)"""
@@ -43,9 +46,25 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
     prev_distance = distance
     return None
 
-def is_fist(fingers):
-    """ตรวจสอบว่ากำมือหรือไม่ (ทุกนิ้วหุบ)"""
-    return fingers == [False, False, False, False, False]
+def is_fist(landmarks):
+    """ตรวจสอบว่ากำมือหรือไม่ด้วยเงื่อนไขที่เข้มงวดขึ้น"""
+    # ตรวจสอบว่าปลายนิ้วทุกนิ้วอยู่ต่ำกว่า MCP joints
+    thumb_tip = landmarks[4].y > landmarks[3].y  # นิ้วโป้ง
+    index_tip = landmarks[8].y > landmarks[6].y  # นิ้วชี้
+    middle_tip = landmarks[12].y > landmarks[10].y  # นิ้วกลาง
+    ring_tip = landmarks[16].y > landmarks[14].y  # นิ้วนาง
+    pinky_tip = landmarks[20].y > landmarks[18].y  # นิ้วก้อย
+    
+    # ตรวจสอบว่าทุกนิ้วหุบ
+    all_fingers_folded = thumb_tip and index_tip and middle_tip and ring_tip and pinky_tip
+    
+    # เพิ่มเงื่อนไขระยะห่างระหว่างนิ้วเพื่อความแม่นยำ
+    if all_fingers_folded:
+        # ตรวจสอบว่าปลายนิ้วชี้กับนิ้วกลางใกล้กัน (กำมือแน่น)
+        index_middle_distance = calculate_distance(landmarks[8], landmarks[12])
+        return index_middle_distance < 0.05  # ค่า threshold สำหรับกำมือ
+    
+    return False
 
 # เปิดกล้อง
 cap = cv2.VideoCapture(0)
@@ -70,18 +89,17 @@ with mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7) a
                 # ดึงข้อมูล landmark
                 landmarks = hand_landmarks.landmark
                 
-                # ตรวจจับสถานะนิ้ว
-                fingers = get_finger_states(landmarks)
-                
                 # ควบคุม Zoom ด้วยนิ้วโป้ง + นิ้วชี้
                 thumb_tip = landmarks[4]   # นิ้วโป้ง
                 index_tip = landmarks[8]   # นิ้วชี้
                 zoom_action = calculate_zoom_gesture(thumb_tip, index_tip)
                 
-                # ตรวจสอบกำมือ (Reset Zoom)
-                if is_fist(fingers):
+                # ตรวจสอบกำมือ (Reset Zoom) พร้อม cooldown
+                current_time = time.time()
+                if is_fist(landmarks) and (current_time - last_reset_time) > reset_cooldown:
                     pyautogui.hotkey('ctrl', '0')
                     print("Reset Zoom")
+                    last_reset_time = current_time
                     cv2.putText(image, "Reset Zoom", (50, 150),
                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 
