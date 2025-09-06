@@ -12,25 +12,25 @@ mp_drawing = mp.solutions.drawing_utils
 prev_distance = None
 last_zoom_time = 0
 last_reset_time = 0
-zoom_cooldown = 0.8  # 0.5 วินาที cooldown สำหรับ zoom
+zoom_cooldown = 1  # 0.5 วินาที cooldown สำหรับ zoom
 reset_cooldown = 0   # 2 วินาที cooldown สำหรับ reset
 
 def calculate_distance(point1, point2):
     """คำนวณระยะห่างระหว่าง 2 จุด"""
     return math.sqrt((point1.x - point2.x)**2 + (point1.y - point2.y)**2)
 
-def is_thumb_and_index_up(landmarks):
+def is_thumb_and_index_up_and_middle_up(landmarks):
     """ตรวจสอบว่านิ้วโป้งและนิ้วชี้ยกขึ้น และนิ้วอื่นไม่ยกขึ้น"""
     thumb_up = landmarks[4].y < landmarks[3].y  # นิ้วโป้งยกขึ้น
     index_up = landmarks[8].y < landmarks[6].y  # นิ้วชี้ยกขึ้น
-    middle_up = landmarks[12].y < landmarks[10].y
-    ring_up = landmarks[16].y < landmarks[14].y
-    pinky_up = landmarks[20].y < landmarks[18].y
+    middle_up = landmarks[12].y < landmarks[10].y #นิ้วกลางยกขึ้น
+    ring_up = landmarks[16].y < landmarks[14].y #นิ้วนางยกขึ้น
+    pinky_up = landmarks[20].y < landmarks[18].y #นิ้วก้อยยกขึ้น
     
     # นิ้วอื่นยกขึ้นไหม?
-    other_fingers_up = middle_up or ring_up or pinky_up
+    other_fingers_up = ring_up or pinky_up
     
-    return thumb_up and index_up and not other_fingers_up
+    return thumb_up and index_up and middle_up and not other_fingers_up
 
 def is_all_fingers_up(landmarks):
     """ตรวจสอบว่าชูนิ้ว 5 นิ้วพร้อมกันหรือไม่"""
@@ -44,7 +44,7 @@ def is_all_fingers_up(landmarks):
 
 def calculate_zoom_gesture(thumb_tip, index_tip):
     """ควบคุม Zoom In/Out ด้วยระยะห่างระหว่างนิ้วโป้งและนิ้วชี้"""
-    global last_zoom_time
+    global prev_distance, last_zoom_time
     
     current_time = time.time()
     distance = calculate_distance(thumb_tip, index_tip)
@@ -53,23 +53,25 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
     if (current_time - last_zoom_time) < zoom_cooldown:
         return None
     
-    # กำหนด threshold สองค่า
-    zoom_in_threshold = 0.20
-    zoom_out_threshold = 0.10
-
-    if distance > zoom_in_threshold:
-        pyautogui.hotkey('ctrl', '+')
-        print(f"Zoom In (distance={distance:.2f})")
-        last_zoom_time = current_time
-        return "Zoom In"
-    elif distance < zoom_out_threshold:
-        pyautogui.hotkey('ctrl', '-')
-        print(f"Zoom Out (distance={distance:.2f})")
-        last_zoom_time = current_time
-        return "Zoom Out"
+    # กำหนด threshold สำหรับ "ห่างกันมาก" / "ห่างกันน้อย"
+    #threshold = 0.15  # ค่า normalized (0-1) อาจต้องปรับตามกล้อง
+    threshold = 0.20
+    if prev_distance is not None:
+        # ถ้าระยะห่างมากกว่า threshold → Zoom In
+        if distance > threshold:
+            pyautogui.hotkey('ctrl', '+')
+            print("Zoom In")
+            last_zoom_time = current_time
+            return "Zoom In"
+        # ถ้าระยะห่างน้อยกว่า threshold → Zoom Out
+        elif distance < threshold:
+            pyautogui.hotkey('ctrl', '-')
+            print("Zoom Out")
+            last_zoom_time = current_time
+            return "Zoom Out"
     
+    prev_distance = distance
     return None
-
 
 # เปิดกล้อง
 cap = cv2.VideoCapture(0)
@@ -95,13 +97,14 @@ with mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7) a
                 landmarks = hand_landmarks.landmark
                 
                 # ควบคุม Zoom ด้วยนิ้วโป้ง + นิ้วชี้ (ใหม่)
-                if is_thumb_and_index_up(landmarks):
+                if is_thumb_and_index_up_and_middle_up(landmarks):
                     thumb_tip = landmarks[4]   # นิ้วโป้ง
-                    index_tip = landmarks[8]   # นิ้วชี้
-                    zoom_action = calculate_zoom_gesture(thumb_tip, index_tip)
+                    # index_tip = landmarks[8]   # นิ้วชี้
+                    middle_tip = landmarks[12] # นิ้วนาง
+                    zoom_action = calculate_zoom_gesture(thumb_tip, middle_tip)
                     
                     # แสดงค่าระยะห่าง
-                    distance = calculate_distance(thumb_tip, index_tip)
+                    distance = calculate_distance(thumb_tip, middle_tip)
                     cv2.putText(image, f"Distance: {distance:.2f}", (50, 50),
                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                     
