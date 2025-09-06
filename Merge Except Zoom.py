@@ -14,345 +14,303 @@ class HandGestureController:
             static_image_mode=False,
             max_num_hands=1,
             min_detection_confidence=0.7,
-            min_tracking_confidence=0.7,
+            min_tracking_confidence=0.6,
             model_complexity=0
         )
         
         # เปิดกล้อง
         self.cap = cv2.VideoCapture(0)
+        if not self.cap.isOpened():
+            print("❌ ไม่สามารถเปิดกล้องได้!")
+            exit()
+        
         self.cap.set(cv2.CAP_PROP_FPS, 30)
         
-        # ตัวแปรควบคุม timing
-        self.last_action_time = 0
-        self.last_screenshot_time = 0
-        self.last_zoom_time = 0
-        self.last_reset_time = 0
-        
-        # Cooldown periods
-        self.scroll_cooldown = 0.1
-        self.screenshot_cooldown = 2.0
-        self.zoom_cooldown = 0.5
-        self.reset_cooldown = 2.0
-        
-        # ตัวแปรสำหรับ gesture tracking
-        self.prev_zoom_distance = None
+        # ตัวแปรควบคุมการทำงาน
+        self.reset_timers()
         self.screenshot_count = 0
-        self.current_gesture = "NONE"
         
-        # ตัวแปรสำหรับ scroll ซ้าย-ขวา
+        # การตั้งค่า
+        self.screenshot_delay = 2.0
+        self.scroll_cooldown = 0.1
+        self.horizontal_scroll_cooldown = 0.02
+        self.scroll_amount = 40
         self.distance_threshold = 0.05
-        
-        # ตัวแปรสำหรับ zoom
-        self.zoom_threshold = 0.15
         
         # ปิด fail-safe
         pyautogui.FAILSAFE = False
         
-        print("✅ Hand Gesture Controller เริ่มทำงาน")
-        print("📝 คำแนะนำการใช้งาน:")
-        print("   1 นิ้ว (นิ้วชี้) → Scroll Up/Down")
-        print("   2 นิ้ว (ชี้+กลาง) → Scroll Left/Right")
-        print("   3 นิ้ว (ชี้+กลาง+นาง) → Screenshot")
-        print("   นิ้วโป้ง+ชี้ → Zoom In/Out")
-        print("   5 นิ้ว → Reset Zoom")
-        print("   กด 'q' เพื่อออกจากโปรแกรม")
+        print("✅ เปิดระบบควบคุมด้วยท่าทางมือสำเร็จ")
+        print("📖 คำแนะนำ:")
+        print("   🤚 3 นิ้วชี้ขึ้น (ชี้,กลาง,นาง) = ถ่าย Screenshot")
+        print("   👆 นิ้วชี้ขึ้น = Scroll Up/Down")
+        print("   ✌️  2 นิ้วชี้ขึ้น (ชี้,กลาง) = Scroll Left/Right")
+        print("   ✊ กำมือ = หยุดทำงาน")
+        print("   ❌ กด 'q' เพื่อออกจากโปรแกรม")
 
-    def calculate_distance(self, point1, point2):
-        """คำนวณระยะห่างระหว่าง 2 จุด"""
-        return math.sqrt((point1.x - point2.x)**2 + (point1.y - point2.y)**2)
+    def reset_timers(self):
+        """รีเซ็ตเวลาทั้งหมด"""
+        self.last_screenshot_time = 0
+        self.last_scroll_time = 0
+        self.last_horizontal_scroll_time = 0
+        self.last_gesture = None
 
-    def is_finger_up(self, tip, mcp):
-        """ตรวจสอบว่านิ้วยกขึ้นหรือไม่"""
-        return tip.y < mcp.y
+    def distance(self, p1, p2):
+        """คำนวณระยะห่างระหว่างจุด 2 จุด"""
+        return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
 
-    def detect_one_finger(self, landmarks):
-        """ตรวจจับนิ้วชี้เดียว สำหรับ scroll up/down"""
+    def is_finger_up(self, tip, pip):
+        """ตรวจสอบว่านิ้วชี้ขึ้นหรือไม่"""
+        return tip.y < pip.y
+
+    def detect_gesture(self, hand_landmarks):
+        """ตรวจจับท่าทางมือและส่งคืนชนิดของท่าทาง"""
+        landmarks = hand_landmarks.landmark
+        
         try:
-            # ตรวจสอบนิ้วแต่ละนิ้ว
-            index_up = self.is_finger_up(landmarks[8], landmarks[5])
-            middle_up = self.is_finger_up(landmarks[12], landmarks[9])
-            ring_up = self.is_finger_up(landmarks[16], landmarks[13])
-            pinky_up = self.is_finger_up(landmarks[20], landmarks[17])
-            thumb_up = landmarks[4].x < landmarks[3].x
+            # จุดสำคัญของนิ้วต่างๆ
+            thumb_tip = landmarks[4]
+            thumb_mcp = landmarks[1]
             
-            # เฉพาะนิ้วชี้ยกขึ้น
-            if index_up and not middle_up and not ring_up and not pinky_up and not thumb_up:
-                # ตรวจสอบทิศทางของนิ้วชี้
-                index_tip = landmarks[8]
-                index_pip = landmarks[6]
+            index_tip = landmarks[8]
+            index_pip = landmarks[6]
+            index_mcp = landmarks[5]
+            
+            middle_tip = landmarks[12]
+            middle_pip = landmarks[10]
+            middle_mcp = landmarks[9]
+            
+            ring_tip = landmarks[16]
+            ring_pip = landmarks[14]
+            ring_mcp = landmarks[13]
+            
+            pinky_tip = landmarks[20]
+            pinky_pip = landmarks[18]
+            pinky_mcp = landmarks[17]
+            
+            # ตรวจสอบว่านิ้วไหนชี้ขึ้น
+            index_up = self.is_finger_up(index_tip, index_pip)
+            middle_up = self.is_finger_up(middle_tip, middle_pip)
+            ring_up = self.is_finger_up(ring_tip, ring_pip)
+            pinky_up = self.is_finger_up(pinky_tip, pinky_pip)
+            thumb_up = thumb_tip.x < thumb_mcp.x  # นิ้วโป้งแยกต่างหาก
+            
+            # ตรวจสอบการกำมือ
+            index_length = self.distance(index_mcp, index_tip)
+            index_full_length = self.distance(index_mcp, index_pip) * 2.5
+            
+            middle_length = self.distance(middle_mcp, middle_tip)
+            middle_full_length = self.distance(middle_mcp, middle_pip) * 2.5
+            
+            ring_length = self.distance(ring_mcp, ring_tip)
+            ring_full_length = self.distance(ring_mcp, ring_pip) * 2.5
+            
+            pinky_length = self.distance(pinky_mcp, pinky_tip)
+            pinky_full_length = self.distance(pinky_mcp, pinky_pip) * 2.5
+            
+            fist_threshold = 0.6
+            is_fist = (
+                index_length < index_full_length * fist_threshold and
+                middle_length < middle_full_length * fist_threshold and
+                ring_length < ring_full_length * fist_threshold and
+                pinky_length < pinky_full_length * fist_threshold
+            )
+            
+            if is_fist:
+                return "fist", {}
+            
+            # ตรวจสอบ 3 นิ้วชี้ขึ้น (Screenshot)
+            if index_up and middle_up and ring_up and not pinky_up:
+                # ตรวจสอบว่านิ้วแยกจากกัน
+                index_middle_separated = abs(index_tip.x - middle_tip.x) > 0.03
+                middle_ring_separated = abs(middle_tip.x - ring_tip.x) > 0.03
                 
-                # คำนวณมุม
+                if index_middle_separated and middle_ring_separated:
+                    return "three_fingers", {}
+            
+            # ตรวจสอบ 2 นิ้วชี้ขึ้น (Horizontal Scroll)
+            elif index_up and middle_up and not ring_up and not pinky_up and not thumb_up:
+                distance_x = abs(index_tip.x - middle_tip.x)
+                return "two_fingers", {"distance": distance_x}
+            
+            # ตรวจสอบ 1 นิ้วชี้ขึ้น (Vertical Scroll)
+            elif index_up and not middle_up and not ring_up and not pinky_up:
+                # คำนวณทิศทางของนิ้วชี้
                 dx = index_tip.x - index_pip.x
                 dy = index_tip.y - index_pip.y
+                
                 angle_rad = math.atan2(dx, -dy)
                 angle_deg = math.degrees(angle_rad)
                 if angle_deg < 0:
                     angle_deg += 360
                 
-                # ชี้ขึ้น
                 if angle_deg < 30 or angle_deg > 330:
-                    return "scroll_up"
-                # ชี้ลง
+                    return "scroll_up", {}
                 elif 150 < angle_deg < 210:
-                    return "scroll_down"
+                    return "scroll_down", {}
             
-            return None
-        except:
-            return None
-
-    def detect_two_fingers(self, landmarks):
-        """ตรวจจับ 2 นิ้ว (ชี้+กลาง) สำหรับ scroll left/right"""
-        try:
-            index_up = self.is_finger_up(landmarks[8], landmarks[5])
-            middle_up = self.is_finger_up(landmarks[12], landmarks[9])
-            ring_up = self.is_finger_up(landmarks[16], landmarks[13])
-            pinky_up = self.is_finger_up(landmarks[20], landmarks[17])
-            thumb_up = landmarks[4].x < landmarks[3].x
+            return "none", {}
             
-            # เฉพาะนิ้วชี้และนิ้วกลางยกขึ้น
-            if index_up and middle_up and not ring_up and not pinky_up and not thumb_up:
-                index_tip = landmarks[8]
-                middle_tip = landmarks[12]
-                
-                # คำนวณระยะห่างระหว่างนิ้วชี้และนิ้วกลาง
-                distance = abs(index_tip.x - middle_tip.x)
-                
-                if distance < self.distance_threshold:
-                    return "scroll_right"
-                elif distance > self.distance_threshold * 2:
-                    return "scroll_left"
-            
-            return None
-        except:
-            return None
-
-    def detect_three_fingers(self, landmarks):
-        """ตรวจจับ 3 นิ้ว (ชี้+กลาง+นาง) สำหรับ screenshot"""
-        try:
-            index_up = self.is_finger_up(landmarks[8], landmarks[6])
-            middle_up = self.is_finger_up(landmarks[12], landmarks[10])
-            ring_up = self.is_finger_up(landmarks[16], landmarks[14])
-            pinky_up = self.is_finger_up(landmarks[20], landmarks[18])
-            
-            # ตรวจสอบว่านิ้วที่ชี้ขึ้นมีการแยกออกจากกัน
-            index_middle_separated = abs(landmarks[8].x - landmarks[12].x) > 0.03
-            middle_ring_separated = abs(landmarks[12].x - landmarks[16].x) > 0.03
-            
-            return (index_up and middle_up and ring_up and not pinky_up and 
-                   index_middle_separated and middle_ring_separated)
-        except:
-            return False
-
-    def detect_thumb_index(self, landmarks):
-        """ตรวจจับนิ้วโป้ง+นิ้วชี้ สำหรับ zoom"""
-        try:
-            thumb_up = landmarks[4].y < landmarks[3].y
-            index_up = self.is_finger_up(landmarks[8], landmarks[6])
-            middle_up = self.is_finger_up(landmarks[12], landmarks[10])
-            ring_up = self.is_finger_up(landmarks[16], landmarks[14])
-            pinky_up = self.is_finger_up(landmarks[20], landmarks[18])
-            
-            # เฉพาะนิ้วโป้งและนิ้วชี้
-            other_fingers_up = middle_up or ring_up or pinky_up
-            return thumb_up and index_up and not other_fingers_up
-        except:
-            return False
-
-    def detect_five_fingers(self, landmarks):
-        """ตรวจจับ 5 นิ้ว สำหรับ reset zoom"""
-        try:
-            thumb = landmarks[4].y < landmarks[3].y
-            index = self.is_finger_up(landmarks[8], landmarks[6])
-            middle = self.is_finger_up(landmarks[12], landmarks[10])
-            ring = self.is_finger_up(landmarks[16], landmarks[14])
-            pinky = self.is_finger_up(landmarks[20], landmarks[18])
-            
-            return thumb and index and middle and ring and pinky
-        except:
-            return False
-
-    def handle_zoom_gesture(self, landmarks):
-        """จัดการ zoom in/out"""
-        current_time = time.time()
-        if (current_time - self.last_zoom_time) < self.zoom_cooldown:
-            return None
-            
-        thumb_tip = landmarks[4]
-        index_tip = landmarks[8]
-        distance = self.calculate_distance(thumb_tip, index_tip)
-        
-        if self.prev_zoom_distance is not None:
-            # เพิ่มระยะห่าง → Zoom In
-            if distance > self.prev_zoom_distance + 0.02:
-                pyautogui.hotkey('ctrl', '+')
-                self.last_zoom_time = current_time
-                self.prev_zoom_distance = distance
-                return "ZOOM IN"
-            # ลดระยะห่าง → Zoom Out
-            elif distance < self.prev_zoom_distance - 0.02:
-                pyautogui.hotkey('ctrl', '-')
-                self.last_zoom_time = current_time
-                self.prev_zoom_distance = distance
-                return "ZOOM OUT"
-        else:
-            self.prev_zoom_distance = distance
-            
-        return None
-
-    def take_screenshot(self):
-        """ถ่าย screenshot"""
-        try:
-            screenshot = pyautogui.screenshot()
-            self.screenshot_count += 1
-            filename = f"screenshot_{self.screenshot_count}_{int(time.time())}.png"
-            screenshot.save(filename)
-            print(f"📸 Screenshot saved: {filename}")
-            return True
         except Exception as e:
-            print(f"❌ Error taking screenshot: {e}")
-            return False
+            print(f"Error in gesture detection: {e}")
+            return "none", {}
 
-    def process_gestures(self, landmarks):
-        """ประมวลผล gestures ทั้งหมด - แก้ไข Priority และการตรวจจับ"""
+    def handle_screenshot(self):
+        """จัดการการถ่าย Screenshot"""
         current_time = time.time()
-        action_taken = None
-        
-        # Priority 1: Reset Zoom (5 นิ้ว) - ตรวจก่อนเพราะครอบคลุมทุกนิ้ว
-        if self.detect_five_fingers(landmarks):
-            if (current_time - self.last_reset_time) > self.reset_cooldown:
-                pyautogui.hotkey('ctrl', '0')
-                self.last_reset_time = current_time
-                action_taken = "RESET ZOOM"
-        
-        # Priority 2: Screenshot (3 นิ้ว) - ตรวจก่อน thumb+index
-        elif self.detect_three_fingers(landmarks):
-            if (current_time - self.last_screenshot_time) > self.screenshot_cooldown:
-                if self.take_screenshot():
-                    self.last_screenshot_time = current_time
-                    action_taken = "SCREENSHOT"
-        
-        # Priority 3: Zoom (นิ้วโป้ง + นิ้วชี้) - ตรวจก่อน 2 finger และ 1 finger
-        elif self.detect_thumb_index(landmarks):
-            zoom_action = self.handle_zoom_gesture(landmarks)
-            if zoom_action:
-                action_taken = zoom_action
-        
-        # Priority 4: Scroll Left/Right (2 นิ้ว) - ตรวจก่อน 1 finger
-        elif self.detect_two_fingers(landmarks):
-            if (current_time - self.last_action_time) > self.scroll_cooldown:
-                scroll_action = self.detect_two_fingers(landmarks)
-                if scroll_action == "scroll_left":
-                    pyautogui.press('left')
-                    action_taken = "SCROLL LEFT"
-                elif scroll_action == "scroll_right":
-                    pyautogui.press('right')
-                    action_taken = "SCROLL RIGHT"
-                
-                if action_taken:
-                    self.last_action_time = current_time
-        
-        # Priority 5: Scroll Up/Down (1 นิ้ว) - ตรวจท้ายสุด
-        else:
-            scroll_action = self.detect_one_finger(landmarks)
-            if scroll_action and (current_time - self.last_action_time) > self.scroll_cooldown:
-                if scroll_action == "scroll_up":
-                    pyautogui.scroll(3)
-                    action_taken = "SCROLL UP"
-                elif scroll_action == "scroll_down":
-                    pyautogui.scroll(-3)
-                    action_taken = "SCROLL DOWN"
-                
-                if action_taken:
-                    self.last_action_time = current_time
-        
-        return action_taken if action_taken else "READY"
+        if current_time - self.last_screenshot_time > self.screenshot_delay:
+            try:
+                screenshot = pyautogui.screenshot()
+                self.screenshot_count += 1
+                filename = f"screenshot_{self.screenshot_count}_{int(time.time())}.png"
+                screenshot.save(filename)
+                print(f"📸 Screenshot saved: {filename}")
+                self.last_screenshot_time = current_time
+                return True
+            except Exception as e:
+                print(f"❌ Error taking screenshot: {e}")
+        return False
 
-    def draw_ui(self, frame):
-        """วาด UI แสดงข้อมูลบนหน้าจอ"""
-        height, width = frame.shape[:2]
-        
-        # พื้นหลังสำหรับข้อมูล
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (10, 10), (400, 120), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
-        
-        # แสดงสถานะปัจจุบัน
-        cv2.putText(frame, f"Status: {self.current_gesture}", (20, 35),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        # แสดงจำนวน screenshots
-        cv2.putText(frame, f"Screenshots: {self.screenshot_count}", (20, 60),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-        
-        # แสดงคำแนะนำ
-        cv2.putText(frame, "Press 'q' to quit", (20, 85),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
-        # แสดงคำแนะนำ gestures (ตัดฟีเจอร์ zoom ออกแล้ว)
-        instructions = [
-            "1 finger: Scroll Up/Down",
-            "2 fingers: Scroll Left/Right", 
-            "3 fingers: Screenshot",
-            "5 fingers: Reset Zoom"
-        ]
-        
-        start_y = height - 120
-        for i, instruction in enumerate(instructions):
-            cv2.putText(frame, instruction, (20, start_y + i * 20),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+    def handle_scroll(self, direction):
+        """จัดการการเลื่อนแนวตั้ง"""
+        current_time = time.time()
+        if current_time - self.last_scroll_time > self.scroll_cooldown:
+            if direction == "up":
+                pyautogui.scroll(self.scroll_amount)
+                print("⬆️ Scroll Up")
+            elif direction == "down":
+                pyautogui.scroll(-self.scroll_amount)
+                print("⬇️ Scroll Down")
+            
+            self.last_scroll_time = current_time
+            return True
+        return False
+
+    def handle_horizontal_scroll(self, distance):
+        """จัดการการเลื่อนแนวนอน"""
+        current_time = time.time()
+        if current_time - self.last_horizontal_scroll_time > self.horizontal_scroll_cooldown:
+            if distance < self.distance_threshold:
+                pyautogui.press('right')
+                print("➡️ Scroll Right")
+                self.last_horizontal_scroll_time = current_time
+                return "RIGHT"
+            elif distance > self.distance_threshold:
+                pyautogui.press('left')
+                print("⬅️ Scroll Left")
+                self.last_horizontal_scroll_time = current_time
+                return "LEFT"
+        return "NONE"
 
     def run(self):
-        """เริ่มการทำงานหลัก"""
-        if not self.cap.isOpened():
-            print("❌ ไม่สามารถเปิดกล้องได้!")
-            return
+        """เรียกใช้งานโปรแกรม"""
+        screenshot_taken = False
+        current_action = "WAITING"
         
         while self.cap.isOpened():
             ret, frame = self.cap.read()
             if not ret:
-                print("❌ ไม่สามารถอ่านภาพจากกล้องได้")
+                print("❌ ไม่สามารถอ่านภาพจากกล้อง")
                 break
-            
-            # กลับด้านภาพ
+
+            # กลับภาพและแปลงสี
             frame = cv2.flip(frame, 1)
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
-            # ประมวลผล hand detection
             results = self.hands.process(rgb_frame)
             
-            self.current_gesture = "NO HAND"
-            
+            # รีเซ็ตสถานะ
+            screenshot_taken = False
+            current_action = "WAITING"
+
             if results.multi_hand_landmarks:
                 for hand_landmarks in results.multi_hand_landmarks:
                     # วาด landmarks
                     self.mp_drawing.draw_landmarks(
-                        frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
+                        frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS
+                    )
                     
-                    # ประมวลผล gestures
-                    landmarks = hand_landmarks.landmark
-                    self.current_gesture = self.process_gestures(landmarks)
+                    # ตรวจจับท่าทาง
+                    gesture_type, gesture_data = self.detect_gesture(hand_landmarks)
+                    
+                    # จัดการท่าทางต่างๆ
+                    if gesture_type == "three_fingers":
+                        screenshot_taken = self.handle_screenshot()
+                        current_action = "SCREENSHOT"
+                        
+                    elif gesture_type == "two_fingers":
+                        action = self.handle_horizontal_scroll(gesture_data["distance"])
+                        current_action = f"H_SCROLL_{action}"
+                        
+                    elif gesture_type == "scroll_up":
+                        self.handle_scroll("up")
+                        current_action = "SCROLL_UP"
+                        
+                    elif gesture_type == "scroll_down":
+                        self.handle_scroll("down")
+                        current_action = "SCROLL_DOWN"
+                        
+                    elif gesture_type == "fist":
+                        current_action = "STOP"
+                        
+                    else:
+                        current_action = "NONE"
+
+            # แสดงข้อมูลบนหน้าจอ
+            y_offset = 30
             
-            # วาด UI
-            self.draw_ui(frame)
+            # สถานะปัจจุบัน
+            color = (0, 255, 0) if current_action != "WAITING" else (255, 255, 255)
+            cv2.putText(frame, f"Action: {current_action}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+            y_offset += 30
             
+            # จำนวน Screenshot
+            cv2.putText(frame, f"Screenshots: {self.screenshot_count}", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            y_offset += 25
+            
+            # คำแนะนำ
+            cv2.putText(frame, "3 fingers = Screenshot | 1 finger = V.Scroll", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+            y_offset += 20
+            cv2.putText(frame, "2 fingers = H.Scroll | Fist = Stop", (10, y_offset),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+            
+            # แสดงการแจ้งเตือนการถ่าย Screenshot
+            if screenshot_taken:
+                cv2.putText(frame, "SCREENSHOT TAKEN!", (50, 100), 
+                          cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
+
             # แสดงผล
-            cv2.imshow('Hand Gesture Controller - All Features', frame)
-            
+            cv2.imshow('Combined Hand Gesture Control', frame)
+
             # ตรวจสอบการกดปุ่ม
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break
-        
+
+        # ปิดทุกอย่าง
         self.cleanup()
 
     def cleanup(self):
-        """ปิดการทำงานและล้างทรัพยากร"""
+        """ทำความสะอาดและปิดโปรแกรม"""
         self.cap.release()
         cv2.destroyAllWindows()
         self.hands.close()
         print("👋 ปิดโปรแกรมเรียบร้อย")
 
-if __name__ == "__main__":
+def main():
     controller = HandGestureController()
-    controller.run()
+    try:
+        controller.run()
+    except KeyboardInterrupt:
+        print("\n🛑 ผู้ใช้หยุดโปรแกรม")
+        controller.cleanup()
+    except Exception as e:
+        print(f"❌ เกิดข้อผิดพลาด: {e}")
+        controller.cleanup()
+
+if __name__ == "__main__":
+    main()
     
