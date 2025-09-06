@@ -17,7 +17,7 @@ cap = cv2.VideoCapture(0)
 
 # ตัวแปรควบคุมการกดปุ่ม
 last_zoom_time = 0
-delay = 2  # หน่วงเวลา 2 วินาที
+delay = 1  # หน่วงเวลา 2 วินาที
 
 def is_victory_sign(hand_landmarks):
     """ตรวจสอบว่าเป็นสัญลักษณ์ V (แบมือ) หรือไม่"""
