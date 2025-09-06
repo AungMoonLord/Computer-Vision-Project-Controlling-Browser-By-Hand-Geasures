@@ -21,15 +21,13 @@ def calculate_distance(point1, point2):
 
 def is_thumb_and_index_up(landmarks):
     """ตรวจสอบว่านิ้วโป้งและนิ้วชี้ยกขึ้น และนิ้วอื่นไม่ยกขึ้น"""
-    thumb_up = landmarks[4].y < landmarks[3].y  # นิ้วโป้งยกขึ้น
-    index_up = landmarks[8].y < landmarks[6].y  # นิ้วชี้ยกขึ้น
+    thumb_up = landmarks[4].y < landmarks[3].y
+    index_up = landmarks[8].y < landmarks[6].y
     middle_up = landmarks[12].y < landmarks[10].y
     ring_up = landmarks[16].y < landmarks[14].y
     pinky_up = landmarks[20].y < landmarks[18].y
     
-    # นิ้วกลาง, นิ้วนาง, นิ้วก้อย ไม่ควรยก
     other_fingers_up = middle_up or ring_up or pinky_up
-    
     return thumb_up and index_up and not other_fingers_up
 
 def is_all_fingers_up(landmarks):
@@ -39,7 +37,6 @@ def is_all_fingers_up(landmarks):
     middle = landmarks[12].y < landmarks[10].y
     ring = landmarks[16].y < landmarks[14].y
     pinky = landmarks[20].y < landmarks[18].y
-    
     return thumb and index and middle and ring and pinky
 
 def calculate_zoom_gesture(thumb_tip, index_tip):
@@ -49,28 +46,26 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
     current_time = time.time()
     distance = calculate_distance(thumb_tip, index_tip)
     
-    # ตรวจสอบ cooldown
     if (current_time - last_zoom_time) < zoom_cooldown:
         return None
 
-    # กำหนดค่า threshold สำหรับการซูม (ปรับตามความเหมาะสม)
+    # ✅ แก้ไขตรงนี้: ตั้งค่า Zoom Out เมื่อ "เกือบแตะกัน" (≈0)
     ZOOM_IN_THRESH = 0.20
-    ZOOM_OUT_THRESH = 0.03  # เริ่มที่ 0.12 — คุณสามารถลดลงเป็น 0.08 ได้ถ้าจีบมือแล้วค่าต่ำพอ
+    ZOOM_OUT_THRESH = 0.03  # <-- เมื่อระยะน้อยกว่า 0.03 = ถือว่า "แตะกัน" → Zoom Out
 
     if distance > ZOOM_IN_THRESH:
         pyautogui.hotkey('ctrl', '+')
-        print(f"[ZOOM IN] Distance: {distance:.3f}")
+        print(f"[ZOOM IN] Distance: {distance:.4f}")
         last_zoom_time = current_time
         prev_distance = distance
         return "Zoom In"
     elif distance < ZOOM_OUT_THRESH:
         pyautogui.hotkey('ctrl', '-')
-        print(f"[ZOOM OUT] Distance: {distance:.3f}")
+        print(f"[ZOOM OUT] Distance: {distance:.4f} ✅ (Near-Zero Trigger)")
         last_zoom_time = current_time
         prev_distance = distance
         return "Zoom Out"
 
-    # อัปเดตค่าระยะล่าสุด แม้ยังไม่ trigger
     prev_distance = distance
     return None
 
@@ -90,17 +85,14 @@ with mp_hands.Hands(
         if not ret:
             break
 
-        # แปลงภาพสำหรับ MediaPipe
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         image.flags.writeable = False
         results = hands.process(image)
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-        # ตรวจจับมือ
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
-                # วาด landmark
                 mp_drawing.draw_landmarks(
                     image, hand_landmarks, mp_hands.HAND_CONNECTIONS,
                     mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=3),
@@ -109,24 +101,20 @@ with mp_hands.Hands(
 
                 landmarks = hand_landmarks.landmark
 
-                # ควบคุม Zoom ด้วยนิ้วโป้ง + นิ้วชี้
                 if is_thumb_and_index_up(landmarks):
-                    thumb_tip = landmarks[4]   # ปลายนิ้วโป้ง
-                    index_tip = landmarks[8]   # ปลายนิ้วชี้
+                    thumb_tip = landmarks[4]
+                    index_tip = landmarks[8]
                     zoom_action = calculate_zoom_gesture(thumb_tip, index_tip)
                     
-                    # แสดงระยะห่างบนหน้าจอ
                     distance = calculate_distance(thumb_tip, index_tip)
-                    cv2.putText(image, f"Distance: {distance:.3f}", (50, 50),
+                    cv2.putText(image, f"Distance: {distance:.4f}", (50, 50),
                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                     
-                    # แสดง action ที่ trigger
                     if zoom_action:
                         color = (0, 255, 255) if "In" in zoom_action else (255, 0, 255)
                         cv2.putText(image, zoom_action, (50, 100),
                                    cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
 
-                # Reset Zoom ด้วยการชู 5 นิ้ว
                 current_time = time.time()
                 if is_all_fingers_up(landmarks) and (current_time - last_reset_time) > reset_cooldown:
                     pyautogui.hotkey('ctrl', '0')
@@ -135,10 +123,8 @@ with mp_hands.Hands(
                     cv2.putText(image, "Reset Zoom", (50, 150),
                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
-        # แสดงผล
         cv2.imshow('Hand Gesture Browser Zoom Control', image)
 
-        # กด 'q' เพื่อออกจากโปรแกรม
         if cv2.waitKey(10) & 0xFF == ord('q'):
             break
 
@@ -151,8 +137,7 @@ with mp_hands.Hands(
                         thumb_tip = landmarks[4]
                         index_tip = landmarks[8]
                         dist = calculate_distance(thumb_tip, index_tip)
-                        print(f"📌 Calibrated Min Distance: {dist:.3f} — ลองใช้ค่านี้เป็น ZOOM_OUT_THRESH")
+                        print(f"📌 Calibrated Min Distance: {dist:.4f} — ใช้ค่านี้ตั้ง ZOOM_OUT_THRESH ได้")
 
-# ปิดกล้องและหน้าต่าง
 cap.release()
 cv2.destroyAllWindows()
