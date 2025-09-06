@@ -46,25 +46,16 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
     prev_distance = distance
     return None
 
-def is_fist(landmarks):
-    """ตรวจสอบว่ากำมือหรือไม่ด้วยเงื่อนไขที่เข้มงวดขึ้น"""
-    # ตรวจสอบว่าปลายนิ้วทุกนิ้วอยู่ต่ำกว่า MCP joints
-    thumb_tip = landmarks[4].y > landmarks[3].y  # นิ้วโป้ง
-    index_tip = landmarks[8].y > landmarks[6].y  # นิ้วชี้
-    middle_tip = landmarks[12].y > landmarks[10].y  # นิ้วกลาง
-    ring_tip = landmarks[16].y > landmarks[14].y  # นิ้วนาง
-    pinky_tip = landmarks[20].y > landmarks[18].y  # นิ้วก้อย
+def is_all_fingers_up(landmarks):
+    """ตรวจสอบว่าชูนิ้ว 5 นิ้วพร้อมกันหรือไม่"""
+    thumb = landmarks[4].y < landmarks[3].y
+    index = landmarks[8].y < landmarks[6].y
+    middle = landmarks[12].y < landmarks[10].y
+    ring = landmarks[16].y < landmarks[14].y
+    pinky = landmarks[20].y < landmarks[18].y
     
-    # ตรวจสอบว่าทุกนิ้วหุบ
-    all_fingers_folded = thumb_tip and index_tip and middle_tip and ring_tip and pinky_tip
-    
-    # เพิ่มเงื่อนไขระยะห่างระหว่างนิ้วเพื่อความแม่นยำ
-    if all_fingers_folded:
-        # ตรวจสอบว่าปลายนิ้วชี้กับนิ้วกลางใกล้กัน (กำมือแน่น)
-        index_middle_distance = calculate_distance(landmarks[8], landmarks[12])
-        return index_middle_distance < 0.05  # ค่า threshold สำหรับกำมือ
-    
-    return False
+    # ตรวจสอบว่าทุกนิ้วชูขึ้น
+    return thumb and index and middle and ring and pinky
 
 # เปิดกล้อง
 cap = cv2.VideoCapture(0)
@@ -94,9 +85,9 @@ with mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7) a
                 index_tip = landmarks[8]   # นิ้วชี้
                 zoom_action = calculate_zoom_gesture(thumb_tip, index_tip)
                 
-                # ตรวจสอบกำมือ (Reset Zoom) พร้อม cooldown
+                # ตรวจสอบชูนิ้ว 5 นิ้ว (Reset Zoom) พร้อม cooldown
                 current_time = time.time()
-                if is_fist(landmarks) and (current_time - last_reset_time) > reset_cooldown:
+                if is_all_fingers_up(landmarks) and (current_time - last_reset_time) > reset_cooldown:
                     pyautogui.hotkey('ctrl', '0')
                     print("Reset Zoom")
                     last_reset_time = current_time
