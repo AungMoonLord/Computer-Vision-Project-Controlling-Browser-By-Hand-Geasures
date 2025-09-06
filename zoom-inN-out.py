@@ -11,7 +11,9 @@ mp_drawing = mp.solutions.drawing_utils
 # ตัวแปร global สำหรับควบคุม timing
 prev_distance = None
 last_zoom_time = 0
-zoom_cooldown = 1  # 1 วินาที cooldown สำหรับ zoom
+last_reset_time = 0
+zoom_cooldown = 1  # 0.5 วินาที cooldown สำหรับ zoom
+reset_cooldown = 1.0  # 1 วินาที cooldown สำหรับ reset
 
 def calculate_distance(point1, point2):
     """คำนวณระยะห่างระหว่าง 2 จุด"""
@@ -29,6 +31,16 @@ def is_thumb_and_index_up(landmarks):
     other_fingers_up = middle_up or ring_up or pinky_up
     
     return thumb_up and index_up and not other_fingers_up
+
+def is_all_fingers_up(landmarks):
+    """ตรวจสอบว่าชูนิ้ว 5 นิ้วพร้อมกันหรือไม่"""
+    thumb = landmarks[4].y < landmarks[3].y
+    index = landmarks[8].y < landmarks[6].y
+    middle = landmarks[12].y < landmarks[10].y
+    ring = landmarks[16].y < landmarks[14].y
+    pinky = landmarks[20].y < landmarks[18].y
+    
+    return thumb and index and middle and ring and pinky
 
 def calculate_zoom_gesture(thumb_tip, index_tip):
     """ควบคุม Zoom In/Out ด้วยระยะห่างระหว่างนิ้วโป้งและนิ้วชี้"""
@@ -102,9 +114,15 @@ with mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7) a
                     if zoom_action:
                         cv2.putText(image, zoom_action, (50, 100),
                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-                else:
-                    # ถ้านิ้วโป้งหรือนิ้วชี้ไม่ยกขึ้น → ไม่ทำอะไร
-                    pass
+                
+                # ตรวจสอบว่าเปิดมือ 5 นิ้วไหม (Reset Zoom)
+                current_time = time.time()
+                if is_all_fingers_up(landmarks) and (current_time - last_reset_time) > reset_cooldown:
+                    pyautogui.hotkey('ctrl', '0')  # Reset Zoom กลับ 100%
+                    print("Reset Zoom to 100%")
+                    last_reset_time = current_time
+                    cv2.putText(image, "Reset Zoom", (50, 150),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
         # แสดงผล
         cv2.imshow('Zoom Gesture Control', image)
