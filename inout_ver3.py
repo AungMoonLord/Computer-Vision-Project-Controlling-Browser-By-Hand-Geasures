@@ -54,10 +54,11 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
         return None
     
     # กำหนด threshold สำหรับ "ห่างกันมาก" / "ห่างกันน้อย"
-    threshold = 0.15  # ค่า normalized (0-1) อาจต้องปรับตามกล้อง
+    #threshold = 0.15  # ค่า normalized (0-1) อาจต้องปรับตามกล้อง
+    threshold = 0.20
     if prev_distance is not None:
         # ถ้าระยะห่างมากกว่า threshold → Zoom In
-        if distance > threshold and :
+        if distance > threshold:
             pyautogui.hotkey('ctrl', '+')
             print("Zoom In")
             last_zoom_time = current_time

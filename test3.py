@@ -58,13 +58,13 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
     if prev_distance is not None:
         diff = distance - prev_distance
         # ถ้าระยะห่างมากกว่า threshold → Zoom In
-        if distance > 0:
+        if distance > 0.03:
             pyautogui.hotkey('ctrl', '+')
             print("Zoom In")
             last_zoom_time = current_time
             return "Zoom In"
         # ถ้าระยะห่างน้อยกว่า threshold → Zoom Out
-        elif distance < 0:
+        elif distance < 0.03:
             pyautogui.hotkey('ctrl', '-')
             print("Zoom Out")
             last_zoom_time = current_time
