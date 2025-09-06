@@ -12,7 +12,7 @@ mp_drawing = mp.solutions.drawing_utils
 prev_distance = None
 last_zoom_time = 0
 last_reset_time = 0
-zoom_cooldown = 0.8  # 0.5 วินาที cooldown สำหรับ zoom
+zoom_cooldown = 1  # 0.5 วินาที cooldown สำหรับ zoom
 reset_cooldown = 0   # 2 วินาที cooldown สำหรับ reset
 
 def calculate_distance(point1, point2):
