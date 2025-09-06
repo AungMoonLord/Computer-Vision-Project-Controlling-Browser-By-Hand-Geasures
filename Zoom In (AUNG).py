@@ -43,29 +43,9 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
     prev_distance = distance
     return None
 
-def control_browser_by_gesture(fingers):
-    """ควบคุมเบราว์เซอร์ตามท่าทางของมือ"""
-    # ชูนิ้วชี้อย่างเดียว = เลื่อนขึ้น
-    if fingers == [False, True, False, False, False]:
-        pyautogui.scroll(100)
-        return "Scroll Up"
-    
-    # ชูนิ้วกลางอย่างเดียว = เลื่อนลง
-    elif fingers == [False, False, True, False, False]:
-        pyautogui.scroll(-100)
-        return "Scroll Down"
-    
-    # กำมือ = รีเซ็ตซูม
-    elif fingers == [False, False, False, False, False]:
-        pyautogui.hotkey('ctrl', '0')
-        return "Reset Zoom"
-    
-    # ชู 4 นิ้ว = ไปแท็บถัดไป
-    elif sum(fingers) == 4:
-        pyautogui.hotkey('ctrl', 'tab')
-        return "Next Tab"
-    
-    return None
+def is_fist(fingers):
+    """ตรวจสอบว่ากำมือหรือไม่ (ทุกนิ้วหุบ)"""
+    return fingers == [False, False, False, False, False]
 
 # เปิดกล้อง
 cap = cv2.VideoCapture(0)
@@ -98,8 +78,12 @@ with mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7) a
                 index_tip = landmarks[8]   # นิ้วชี้
                 zoom_action = calculate_zoom_gesture(thumb_tip, index_tip)
                 
-                # ควบคุมเบราว์เซอร์ตามท่าทางอื่น
-                browser_action = control_browser_by_gesture(fingers)
+                # ตรวจสอบกำมือ (Reset Zoom)
+                if is_fist(fingers):
+                    pyautogui.hotkey('ctrl', '0')
+                    print("Reset Zoom")
+                    cv2.putText(image, "Reset Zoom", (50, 150),
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 
                 # แสดงค่าระยะห่าง
                 distance = calculate_distance(thumb_tip, index_tip)
@@ -110,13 +94,9 @@ with mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7) a
                 if zoom_action:
                     cv2.putText(image, zoom_action, (50, 100),
                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-                
-                if browser_action:
-                    cv2.putText(image, browser_action, (50, 150),
-                               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
 
         # แสดงผล
-        cv2.imshow('Hand Gesture Browser Control', image)
+        cv2.imshow('Zoom Gesture Control', image)
 
         # กด 'q' เพื่อออกจากโปรแกรม
         if cv2.waitKey(10) & 0xFF == ord('q'):
