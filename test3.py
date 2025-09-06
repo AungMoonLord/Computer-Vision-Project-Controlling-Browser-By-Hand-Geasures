@@ -55,7 +55,7 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
 
     # กำหนดค่า threshold สำหรับการซูม (ปรับตามความเหมาะสม)
     ZOOM_IN_THRESH = 0.20
-    ZOOM_OUT_THRESH = 0.12  # เริ่มที่ 0.12 — คุณสามารถลดลงเป็น 0.08 ได้ถ้าจีบมือแล้วค่าต่ำพอ
+    ZOOM_OUT_THRESH = 0.03  # เริ่มที่ 0.12 — คุณสามารถลดลงเป็น 0.08 ได้ถ้าจีบมือแล้วค่าต่ำพอ
 
     if distance > ZOOM_IN_THRESH:
         pyautogui.hotkey('ctrl', '+')
