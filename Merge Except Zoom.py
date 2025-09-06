@@ -1,4 +1,3 @@
-"""Merge โค้ดทุกคนรวมในไฟล์เดียว"""
 import cv2
 import mediapipe as mp
 import pyautogui
@@ -19,7 +18,7 @@ class HandGestureController:
             model_complexity=0
         )
         
-        # เปิดกล้องv
+        # เปิดกล้อง
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FPS, 30)
         
@@ -214,31 +213,31 @@ class HandGestureController:
             return False
 
     def process_gestures(self, landmarks):
-        """ประมวลผล gestures ทั้งหมด"""
+        """ประมวลผล gestures ทั้งหมด - แก้ไข Priority และการตรวจจับ"""
         current_time = time.time()
         action_taken = None
         
-        # Priority 1: Screenshot (3 นิ้ว)
-        if self.detect_three_fingers(landmarks):
-            if (current_time - self.last_screenshot_time) > self.screenshot_cooldown:
-                if self.take_screenshot():
-                    self.last_screenshot_time = current_time
-                    action_taken = "SCREENSHOT"
-        
-        # Priority 2: Zoom (นิ้วโป้ง + นิ้วชี้)
-        elif self.detect_thumb_index(landmarks):
-            zoom_action = self.handle_zoom_gesture(landmarks)
-            if zoom_action:
-                action_taken = zoom_action
-        
-        # Priority 3: Reset Zoom (5 นิ้ว)
-        elif self.detect_five_fingers(landmarks):
+        # Priority 1: Reset Zoom (5 นิ้ว) - ตรวจก่อนเพราะครอบคลุมทุกนิ้ว
+        if self.detect_five_fingers(landmarks):
             if (current_time - self.last_reset_time) > self.reset_cooldown:
                 pyautogui.hotkey('ctrl', '0')
                 self.last_reset_time = current_time
                 action_taken = "RESET ZOOM"
         
-        # Priority 4: Scroll Left/Right (2 นิ้ว)
+        # Priority 2: Screenshot (3 นิ้ว) - ตรวจก่อน thumb+index
+        elif self.detect_three_fingers(landmarks):
+            if (current_time - self.last_screenshot_time) > self.screenshot_cooldown:
+                if self.take_screenshot():
+                    self.last_screenshot_time = current_time
+                    action_taken = "SCREENSHOT"
+        
+        # Priority 3: Zoom (นิ้วโป้ง + นิ้วชี้) - ตรวจก่อน 2 finger และ 1 finger
+        elif self.detect_thumb_index(landmarks):
+            zoom_action = self.handle_zoom_gesture(landmarks)
+            if zoom_action:
+                action_taken = zoom_action
+        
+        # Priority 4: Scroll Left/Right (2 นิ้ว) - ตรวจก่อน 1 finger
         elif self.detect_two_fingers(landmarks):
             if (current_time - self.last_action_time) > self.scroll_cooldown:
                 scroll_action = self.detect_two_fingers(landmarks)
@@ -252,7 +251,7 @@ class HandGestureController:
                 if action_taken:
                     self.last_action_time = current_time
         
-        # Priority 5: Scroll Up/Down (1 นิ้ว)
+        # Priority 5: Scroll Up/Down (1 นิ้ว) - ตรวจท้ายสุด
         else:
             scroll_action = self.detect_one_finger(landmarks)
             if scroll_action and (current_time - self.last_action_time) > self.scroll_cooldown:
@@ -289,12 +288,11 @@ class HandGestureController:
         cv2.putText(frame, "Press 'q' to quit", (20, 85),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # แสดงคำแนะนำ gestures
+        # แสดงคำแนะนำ gestures (ตัดฟีเจอร์ zoom ออกแล้ว)
         instructions = [
             "1 finger: Scroll Up/Down",
             "2 fingers: Scroll Left/Right", 
             "3 fingers: Screenshot",
-            "Thumb+Index: Zoom In/Out",
             "5 fingers: Reset Zoom"
         ]
         
@@ -357,3 +355,4 @@ class HandGestureController:
 if __name__ == "__main__":
     controller = HandGestureController()
     controller.run()
+    
