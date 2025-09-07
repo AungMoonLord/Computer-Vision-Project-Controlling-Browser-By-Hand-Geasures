@@ -53,7 +53,7 @@ def calculate_zoom_gesture(thumb_tip, index_tip):
     if (current_time - last_zoom_time) < zoom_cooldown:
         return None
 
-    threshold = 0.20
+    threshold = 0.13
     if prev_distance is not None:
         if dist > threshold:
             pyautogui.hotkey('ctrl', '+')
