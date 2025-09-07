@@ -30,7 +30,7 @@ zoom_cooldown = 1.0
 reset_cooldown = 2.0
 scroll_cooldown = 0.1
 screenshot_cooldown = 2.0
-horizontal_scroll_cooldown = 0.02
+horizontal_scroll_cooldown = 0.1 #เดิม 0.02
 
 # Other settings
 scroll_amount = 40
