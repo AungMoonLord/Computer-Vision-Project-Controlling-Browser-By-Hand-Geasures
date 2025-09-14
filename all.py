@@ -3,7 +3,7 @@ import mediapipe as mp
 import pyautogui
 import math
 import time
-import numpy as np
+
 
 # Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands

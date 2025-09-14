@@ -3,7 +3,7 @@ import mediapipe as mp
 import pyautogui
 import math
 import time
-import numpy as np
+
 
 # ปิด fail-safe ของ pyautogui
 pyautogui.FAILSAFE = False
